@@ -1,0 +1,44 @@
+name: Weekly shop Silver processing
+
+on:
+  schedule:
+    # Friday at 11:17 in Da Nang (UTC+7), after the 09:00 Bronze schedule.
+    - cron: '17 4 * * 5'
+  workflow_dispatch:
+    inputs:
+      bronze_run_id:
+        description: 'Successful weekly Bronze run ID (blank processes pending runs)'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-shop-silver
+  cancel-in-progress: false
+
+jobs:
+  standardize:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Standardize and publish shop snapshots
+        shell: bash
+        env:
+          BRONZE_RUN_ID: ${{ inputs.bronze_run_id }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          args=(--repository "$GITHUB_REPOSITORY")
+          if [[ -n "$BRONZE_RUN_ID" ]]; then
+            args+=(--bronze-run-id "$BRONZE_RUN_ID")
+          fi
+          python -m pipeline.silver.shop_run "${args[@]}"
